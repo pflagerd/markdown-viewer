@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#
+# markdown-viewer [FILE...]
+#
+# Opens each FILE in the installed Markdown Viewer PWA. Without FILE, or when
+# the PWA is not installed yet, opens the app itself.
+#
+# Environment:
+#   MARKDOWN_VIEWER_PORT     localhost port the app is served on (default 8137).
+#                            The port is part of the PWA's identity: changing it
+#                            means installing the app again.
+#   MARKDOWN_VIEWER_BROWSER  Chrome/Chromium executable to use (default: the one
+#                            that installed the PWA, else the first found on PATH).
+#   MARKDOWN_VIEWER_INSTALLED  Set to 1 to skip the "is the PWA installed?" check,
+#                            if the launcher fails to detect an existing install.
+
+set -euo pipefail
+
+PORT="${MARKDOWN_VIEWER_PORT:-8137}"
+ORIGIN="http://localhost:${PORT}"
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+APP_DIR="$(dirname "$(dirname "$SELF")")/app"
+DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+
+die() { echo "markdown-viewer: $*" >&2; exit 1; }
+
+case "${1:-}" in
+  -h|--help) sed -n '3,16s/^# \{0,1\}//p' "$SELF"; exit 0 ;;
+esac
+
+command -v python3 >/dev/null || die "python3 is required"
+[ -f "$APP_DIR/index.html" ] || die "app directory not found: $APP_DIR"
+
+listening() { (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; }
+
+# Serve the app (static files only) on the loopback interface. The server keeps
+# running after this script exits.
+if ! listening; then
+  setsid python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$APP_DIR" \
+    >/dev/null 2>&1 </dev/null &
+  for _ in $(seq 50); do listening && break; sleep 0.1; done
+  listening || die "could not start the local server on port $PORT"
+fi
+
+# Chromium derives a web app's ID from its manifest id (here "$ORIGIN/"):
+# SHA-256 twice, first 16 bytes, hex digits 0-f written as letters a-p.
+APP_ID="$(python3 - "$ORIGIN/" <<'EOF'
+import hashlib, sys
+digest = hashlib.sha256(hashlib.sha256(sys.argv[1].encode()).digest()).hexdigest()[:32]
+print(digest.translate(str.maketrans("0123456789abcdef", "abcdefghijklmnop")))
+EOF
+)"
+
+# Chrome writes one desktop entry per installed PWA; its Exec line names the
+# browser binary and profile that own the installation.
+DESKTOP_FILE=""
+for f in "$DESKTOP_DIR"/chrome-"$APP_ID"-*.desktop \
+         "$HOME"/snap/chromium/current/.local/share/applications/chrome-"$APP_ID"-*.desktop; do
+  [ -f "$f" ] && { DESKTOP_FILE="$f"; break; }
+done
+
+BROWSER="${MARKDOWN_VIEWER_BROWSER:-}"
+PROFILE_ARG=()
+if [ -n "$DESKTOP_FILE" ]; then
+  exec_line="$(grep -m1 '^Exec=' "$DESKTOP_FILE" | cut -d= -f2-)"
+  if [ -z "$BROWSER" ]; then
+    candidate="${exec_line%% *}"
+    [ -x "$candidate" ] && BROWSER="$candidate"
+  fi
+  profile="$(sed -n 's/.*--profile-directory=\("[^"]*"\|[^ ]*\).*/\1/p' <<<"$exec_line" | tr -d '"')"
+  [ -n "$profile" ] && PROFILE_ARG=("--profile-directory=$profile")
+fi
+if [ -z "$BROWSER" ]; then
+  for b in google-chrome-stable google-chrome chromium chromium-browser; do
+    if command -v "$b" >/dev/null; then BROWSER="$b"; break; fi
+  done
+fi
+[ -n "$BROWSER" ] || die "no Chrome/Chromium found; set MARKDOWN_VIEWER_BROWSER"
+
+if [ -z "$DESKTOP_FILE" ] && [ "${MARKDOWN_VIEWER_INSTALLED:-}" != 1 ]; then
+  echo "markdown-viewer: the app is not installed yet." >&2
+  echo "  Click 'Install' in the window that opens, then run this command again." >&2
+  "$BROWSER" "--app=$ORIGIN/" >/dev/null 2>&1 &
+  exit 0
+fi
+
+FILES=()
+for f in "$@"; do
+  [ -f "$f" ] || die "no such file: $f"
+  FILES+=("$(readlink -f "$f")")
+done
+
+"$BROWSER" "${PROFILE_ARG[@]}" "--app-id=$APP_ID" "${FILES[@]}" >/dev/null 2>&1 &
