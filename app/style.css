@@ -1,0 +1,106 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --border: #d1d9e0;
+  --subtle: #f6f8fa;
+  --link: #0969da;
+  --error: #cf222e;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --border: #3d444d;
+    --subtle: #161b22;
+    --link: #4493f8;
+    --error: #ff7b72;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 3rem; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
+}
+
+#toolbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .35rem .75rem;
+  background: var(--subtle);
+  border-bottom: 1px solid var(--border);
+  font-size: .875rem;
+}
+#filename { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#status { flex: 1; min-width: 0; color: var(--error); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#toolbar button {
+  font: inherit; color: inherit;
+  padding: .15rem .6rem;
+  background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer;
+}
+#toolbar button:disabled { opacity: .5; cursor: default; }
+#install { border-color: var(--link); color: var(--link); }
+
+#empty { color: var(--muted); text-align: center; margin-top: 15vh; }
+#empty h1 { border: 0; }
+
+.markdown-body { max-width: 980px; margin: 0 auto; padding: 2rem; overflow-wrap: break-word; }
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  margin: 1.5rem 0 1rem; line-height: 1.25; font-weight: 600;
+}
+.markdown-body h1 { font-size: 2em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+.markdown-body h2 { font-size: 1.5em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+.markdown-body h3 { font-size: 1.25em; }
+.markdown-body h4 { font-size: 1em; }
+.markdown-body h5 { font-size: .875em; }
+.markdown-body h6 { font-size: .85em; color: var(--muted); }
+.markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body blockquote,
+.markdown-body pre, .markdown-body table, .markdown-body dl { margin: 0 0 1rem; }
+.markdown-body a { color: var(--link); text-decoration: none; }
+.markdown-body a:hover { text-decoration: underline; }
+.markdown-body a.unresolved { text-decoration: underline dotted; cursor: not-allowed; }
+.markdown-body ul, .markdown-body ol { padding-left: 2em; }
+.markdown-body li + li { margin-top: .25em; }
+.markdown-body li > ul, .markdown-body li > ol { margin-bottom: 0; }
+.markdown-body li:has(> input[type="checkbox"]) { list-style: none; }
+.markdown-body li > input[type="checkbox"] { margin: 0 .35em 0 -1.4em; }
+.markdown-body blockquote { padding: 0 1em; color: var(--muted); border-left: .25em solid var(--border); }
+.markdown-body hr { height: .25em; margin: 1.5rem 0; background: var(--border); border: 0; }
+.markdown-body img, .markdown-body svg { max-width: 100%; }
+.markdown-body code, .markdown-body pre {
+  font-family: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 85%;
+}
+.markdown-body :not(pre) > code { padding: .2em .4em; background: var(--subtle); border-radius: 6px; }
+.markdown-body pre { padding: 1rem; overflow: auto; line-height: 1.45; background: var(--subtle); border-radius: 6px; }
+.markdown-body pre code { font-size: 100%; padding: 0; background: transparent; }
+.markdown-body pre code.hljs { padding: 0; background: transparent; }
+.markdown-body table { display: block; width: max-content; max-width: 100%; overflow: auto; border-collapse: collapse; }
+.markdown-body th, .markdown-body td { padding: 6px 13px; border: 1px solid var(--border); }
+.markdown-body th { font-weight: 600; background: var(--subtle); }
+.markdown-body tr:nth-child(2n) td { background: var(--subtle); }
+.markdown-body kbd {
+  padding: .15em .4em; font-size: 85%;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px;
+  background: var(--subtle);
+}
+.markdown-body del { color: var(--muted); }
+.markdown-body .math[data-display="1"] { overflow-x: auto; overflow-y: hidden; margin: 0 0 1rem; }
+.markdown-body .mermaid-diagram { text-align: center; margin: 0 0 1rem; overflow-x: auto; }
+.markdown-body .render-error { color: var(--error); font-size: .875rem; margin-bottom: .25rem; }
+
+@media print {
+  #toolbar { display: none; }
+  .markdown-body { max-width: none; padding: 0; }
+  .markdown-body pre { white-space: pre-wrap; }
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f8fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161b22" media="(prefers-color-scheme: dark)">
+<title>Markdown Viewer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="vendor/highlight/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="vendor/highlight/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="toolbar">
+  <span id="filename">No file open</span>
+  <span id="status" role="status"></span>
+  <button id="install" type="button" hidden>Install</button>
+  <button id="reload" type="button" title="Read the file from disk again (R)" disabled>Reload</button>
+  <button id="open" type="button" title="Open a Markdown file (O)">Open…</button>
+</header>
+<main id="view" class="markdown-body">
+  <div id="empty">
+    <h1>Markdown Viewer</h1>
+    <p>Open a file with <code>markdown-viewer FILE.md</code>, with your file manager's
+       <em>Open With</em> menu, or with the <strong>Open…</strong> button above.</p>
+    <p id="install-hint" hidden>The launcher and the <em>Open With</em> menu work only after this
+       app has been installed. Use the <strong>Install</strong> button above.</p>
+  </div>
+</main>
+<script src="vendor/marked/marked.umd.js"></script>
+<script src="vendor/dompurify/purify.min.js"></script>
+<script src="vendor/highlight/highlight.min.js"></script>
+<script src="vendor/katex/katex.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
