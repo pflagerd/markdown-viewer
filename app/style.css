@@ -50,14 +50,18 @@ body {
 }
 .menu.submenu { top: -.3rem; left: 100%; max-width: 24rem; }
 #recent-wrap { position: relative; }
-#toolbar .menu button {
+#context-menu { position: fixed; top: 0; left: 0; z-index: 30; min-width: 11rem; font-size: .875rem; outline: none; }
+#toolbar .menu button, #context-menu button {
   display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
   width: 100%; padding: .3rem .75rem;
   text-align: left; white-space: nowrap;
   background: none; border: 0; border-radius: 0;
 }
+#context-menu button { font: inherit; color: inherit; cursor: pointer; }
+#context-menu button:disabled { opacity: .5; cursor: default; }
 #toolbar .menu.submenu button { display: block; overflow: hidden; text-overflow: ellipsis; }
 #toolbar .menu button:not(:disabled):is(:hover, :focus-visible),
+#context-menu button:not(:disabled):is(:hover, :focus-visible),
 #toolbar .menu button[aria-expanded="true"] { background: var(--subtle); outline: none; }
 .menu hr { height: 1px; margin: .25rem 0; background: var(--border); border: 0; }
 .menu kbd, .menu .arrow { font: inherit; color: var(--muted); }
@@ -135,7 +139,7 @@ body {
 .markdown-body .render-error { color: var(--error); font-size: .875rem; margin-bottom: .25rem; }
 
 @media print {
-  #toolbar { display: none; }
+  #toolbar, #context-menu { display: none; }
   .markdown-body { max-width: none; padding: 0; }
   .markdown-body pre { white-space: pre-wrap; }
 }

@@ -9,6 +9,7 @@ const fileMenuBtn = document.getElementById('file-menu-btn');
 const fileMenu = document.getElementById('file-menu');
 const recentBtn = document.getElementById('recent-btn');
 const recentMenu = document.getElementById('recent-menu');
+const contextMenu = document.getElementById('context-menu');
 const installBtn = document.getElementById('install');
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -403,6 +404,7 @@ function closeSubmenu() {
   recentBtn.setAttribute('aria-expanded', 'false');
 }
 async function openMenu() {
+  closeContextMenu();
   await fillRecentMenu();
   fileMenu.hidden = false;
   fileMenuBtn.setAttribute('aria-expanded', 'true');
@@ -452,9 +454,160 @@ document.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('blur', closeMenu);
 
+/* ---------- Context menu ---------- */
+
+// Replaces Chrome's own right-click menu, most of which (Back, Reload, Save
+// as…, View page source, Inspect) makes no sense for the viewer.
+let contextReturnFocus = null;
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(
+    () => setStatus(''),
+    (err) => setStatus(`Could not copy: ${err.message || err}`),
+  );
+}
+
+function contextMenuItems(target) {
+  const items = [];
+  const add = (label, run, disabled = false) => {
+    const b = menuItem(label);
+    b.disabled = disabled;
+    b.addEventListener('click', () => { closeContextMenu(); run(); });
+    items.push(b);
+  };
+  // Taken now rather than at click time, so it is what the user saw selected.
+  const selected = String(window.getSelection());
+  if (selected) add('Copy', () => copyText(selected));
+  const a = target instanceof Element ? target.closest('#view a[href]') : null;
+  if (a) {
+    // a.href would resolve #anchors and relative links against the app's own
+    // URL, which says nothing about the document; copy those as written.
+    const written = a.getAttribute('href');
+    const asWritten = written.startsWith('#') || a.classList.contains('unresolved');
+    add('Copy Link Address', () => copyText(asWritten ? written : a.href));
+  }
+  if (items.length) items.push(document.createElement('hr'));
+  add('Reload', actions.reload, !docs[active]);
+  add('Close', actions.close, !docs[active]);
+  return items;
+}
+
+function openContextMenu(target, x, y) {
+  closeMenu();
+  if (contextMenu.hidden) contextReturnFocus = document.activeElement;
+  contextMenu.replaceChildren(...contextMenuItems(target));
+  contextMenu.hidden = false;
+  // Keep the whole menu inside the viewport.
+  const maxX = document.documentElement.clientWidth - contextMenu.offsetWidth - 2;
+  const maxY = document.documentElement.clientHeight - contextMenu.offsetHeight - 2;
+  contextMenu.style.left = `${Math.max(0, Math.min(x, maxX))}px`;
+  contextMenu.style.top = `${Math.max(0, Math.min(y, maxY))}px`;
+  // Focus goes to the menu itself, not to an item: Enter then cannot activate
+  // whatever had focus in the page, and no item looks chosen before a key is
+  // pressed. Focusing does not disturb the text selection.
+  contextMenu.focus({ preventScroll: true });
+}
+
+function closeContextMenu() {
+  if (contextMenu.hidden) return;
+  const hadFocus = contextMenu.contains(document.activeElement);
+  contextMenu.hidden = true;
+  if (hadFocus && contextReturnFocus?.isConnected) contextReturnFocus.focus({ preventScroll: true });
+  contextReturnFocus = null;
+}
+
+document.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (contextMenu.contains(e.target)) return;
+  openContextMenu(e.target, e.clientX, e.clientY);
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (contextMenu.hidden) return;
+  // Inside the menu: keep the text selection (and focus) where they are so
+  // that Copy still has something to copy.
+  if (contextMenu.contains(e.target)) e.preventDefault();
+  else closeContextMenu();
+});
+window.addEventListener('blur', closeContextMenu);
+// Capturing, so that scrolling inside a code block or table counts too.
+window.addEventListener('scroll', closeContextMenu, true);
+
+/* ---------- Keyboard ---------- */
+
+// The viewer answers to the keys below and to no others: every other
+// keystroke is suppressed, so that browser shortcuts which make no sense here
+// (reload the page, save, view source, history, dev tools…) do nothing.
+// Ctrl+W, Ctrl+N, Ctrl+T and Alt+F4 never reach a page and still work.
+// Entries are written as produced by keyCombo().
+const ALLOWED_KEYS = new Set([
+  // Reload the current file
+  'F5', 'Ctrl+r', 'r',
+  // Open
+  'o',
+  // Menus and focus
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Tab', 'Shift+Tab',
+  // Scrolling
+  'PageUp', 'PageDown', 'Home', 'End', 'Space', 'Shift+Space', 'Ctrl+Home', 'Ctrl+End',
+  // Copy, select all
+  'Ctrl+c', 'Ctrl+a',
+  // Chrome's find bar and print dialog
+  'Ctrl+f', 'Ctrl+p',
+  // Zoom ("+" is Shift+"=" on many layouts)
+  'Ctrl++', 'Ctrl+Shift++', 'Ctrl+=', 'Ctrl+-', 'Ctrl+0',
+]);
+
+// Allowed as well when the server was started in dev-tools mode.
+const DEVTOOLS_KEYS = new Set([
+  'F12', 'Ctrl+Shift+i', 'Ctrl+Shift+j', 'Ctrl+Shift+c',
+  // Reload the page itself
+  'Ctrl+Shift+r', 'Ctrl+F5',
+]);
+
+// Pressed on their own these do nothing, and they must stay usable as part of
+// the combinations above.
+const MODIFIER_KEYS = new Set([
+  'Control', 'Shift', 'Alt', 'AltGraph', 'Meta', 'OS', 'CapsLock', 'NumLock', 'ScrollLock',
+  'Fn', 'FnLock', 'Hyper', 'Super', 'Symbol', 'SymbolLock',
+]);
+
+// The numeric keypad zooms too, whatever NumLock makes the keys produce.
+const NUMPAD_ZOOM = { NumpadAdd: '+', NumpadSubtract: '-', Numpad0: '0' };
+
+let devtoolsEnabled = false;
+
+// "Ctrl+Shift+i", "Shift+Tab", "r"…: modifiers in the order Ctrl, Alt, Shift,
+// Meta, then the key. Letters are lower case whatever Shift and CapsLock say.
+function keyCombo(e) {
+  let key = e.key;
+  if (e.ctrlKey && NUMPAD_ZOOM[e.code]) key = NUMPAD_ZOOM[e.code];
+  else if (key === ' ') key = 'Space';
+  else if (key.length === 1) key = key.toLowerCase();
+  return (e.ctrlKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '')
+    + (e.shiftKey ? 'Shift+' : '') + (e.metaKey ? 'Meta+' : '') + key;
+}
+
+function isAllowedKey(e) {
+  if (MODIFIER_KEYS.has(e.key)) return true;
+  const combo = keyCombo(e);
+  return ALLOWED_KEYS.has(combo) || (devtoolsEnabled && DEVTOOLS_KEYS.has(combo));
+}
+
+// Capturing on window, so this runs before anything else sees the key.
+// Suppressed keys only lose their default action; the event still propagates.
+window.addEventListener('keydown', (e) => {
+  if (!isAllowedKey(e)) e.preventDefault();
+}, true);
+
+// The server says whether it was started in dev-tools mode. No answer (server
+// not running, or an older server) means no.
+fetch('/api/config', { cache: 'no-store' })
+  .then((res) => (res.ok ? res.json() : {}))
+  .then((config) => { devtoolsEnabled = config.devtools === true; })
+  .catch(() => {});
+
 // F5 and Ctrl+R would reload the page, which forgets the open files; make them
-// re-read the current file instead. Ctrl+Shift+R and Ctrl+F5 still reload the
-// page itself.
+// re-read the current file instead.
 document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (e.shiftKey || e.altKey || e.metaKey) return;
@@ -466,17 +619,23 @@ document.addEventListener('keydown', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (fileMenu.hidden) {
-    if (e.key === 'o') pickFile();
-    else if (e.key === 'r') reloadActive();
+  const inContext = !contextMenu.hidden;
+  if (fileMenu.hidden && !inContext) {
+    if (e.shiftKey) return;
+    const key = e.key.toLowerCase();    // CapsLock must not disable the shortcuts
+    if (key === 'o') pickFile();
+    else if (key === 'r') reloadActive();
     return;
   }
   const inSub = !recentMenu.hidden && recentMenu.contains(document.activeElement);
-  const items = enabledItems(inSub ? recentMenu : fileMenu);
+  const items = enabledItems(inContext ? contextMenu : inSub ? recentMenu : fileMenu);
   const at = items.indexOf(document.activeElement);
   if (e.key === 'ArrowDown') items[(at + 1) % items.length]?.focus();
-  else if (e.key === 'ArrowUp') items[(at - 1 + items.length) % items.length]?.focus();
-  else if (e.key === 'ArrowRight' && document.activeElement === recentBtn) openSubmenu(true);
+  else if (e.key === 'ArrowUp') items[(Math.max(at, 0) - 1 + items.length) % items.length]?.focus();
+  else if (inContext) {
+    if (e.key !== 'Escape') return;
+    closeContextMenu();
+  } else if (e.key === 'ArrowRight' && document.activeElement === recentBtn) openSubmenu(true);
   else if (e.key === 'ArrowLeft' && inSub) { closeSubmenu(); recentBtn.focus(); }
   else if (e.key === 'Escape') {
     if (inSub) { closeSubmenu(); recentBtn.focus(); } else { closeMenu(); fileMenuBtn.focus(); }
@@ -526,6 +685,14 @@ window.addEventListener('appinstalled', () => {
   installBtn.hidden = true;
   document.getElementById('install-hint').hidden = true;
 });
+
+// One connection, shared by every window of the app, that lets the server see
+// that a browser is still attached.
+try {
+  new SharedWorker('heartbeat.js');
+} catch (err) {
+  console.warn('Could not start the heartbeat', err);
+}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch((err) => {
