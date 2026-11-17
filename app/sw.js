@@ -1,7 +1,7 @@
 'use strict';
 
 // Bump when the list of files changes, so stale caches are dropped.
-const CACHE = 'markdown-viewer-v2';
+const CACHE = 'markdown-viewer-v3';
 
 const ASSETS = [
   './',

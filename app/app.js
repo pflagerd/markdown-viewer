@@ -452,6 +452,18 @@ document.addEventListener('mousedown', (e) => {
 });
 window.addEventListener('blur', closeMenu);
 
+// F5 and Ctrl+R would reload the page, which forgets the open files; make them
+// re-read the current file instead. Ctrl+Shift+R and Ctrl+F5 still reload the
+// page itself.
+document.addEventListener('keydown', (e) => {
+  const key = e.key.toLowerCase();
+  if (e.shiftKey || e.altKey || e.metaKey) return;
+  if ((key === 'f5' && !e.ctrlKey) || (key === 'r' && e.ctrlKey)) {
+    e.preventDefault();
+    reloadActive();
+  }
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (fileMenu.hidden) {

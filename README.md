@@ -57,7 +57,7 @@ files, so it should appear in the file manager's *Open With* menu.
 |------|--------------|
 | **Open…** (`o`) | File picker; each chosen file opens in a new tab. |
 | **Recently Viewed** | The last 10 files viewed, newest first; choosing one opens it. **Clear** at the bottom empties the list. |
-| **Reload** (`r`) | Reads the current file from disk again, keeping the scroll position. |
+| **Reload** (`F5`, `Ctrl+R`, `r`) | Reads the current file from disk again, keeping the scroll position. |
 | **Close** | Closes the current file. Tabs also have their own × and close on middle-click. |
 | **Close All** | Closes every file in the window. |
 | **Exit** | Closes the window. |
@@ -102,7 +102,9 @@ Not tested, because the test machine had no desktop environment and no `xdg-util
   one file, not to its directory.
 - Images are loaded from `http:`/`https:` URLs if the document references them.
 - The file is not watched; use **File → Reload** after editing.
-- Reloading the page itself (F5) forgets the open files; they stay in **Recently Viewed**.
+- `F5` and `Ctrl+R` are captured and re-read the current file. Reloading the page itself
+  (`Ctrl+Shift+R`, `Ctrl+F5`, or *Reload* in Chrome's own ⋮ menu) cannot be intercepted and
+  forgets the open files; they stay in **Recently Viewed**.
 - **Recently Viewed** shows file names only, because the browser does not tell the app a file's
   directory. After Chrome restarts it may ask again for permission when a recent file is chosen.
 
