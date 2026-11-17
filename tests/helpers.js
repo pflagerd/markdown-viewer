@@ -249,8 +249,7 @@ async function clickFileMenuItem(page, label) {
 async function openRecentMenu(page) {
   await openFileMenu(page);
   const sub = fileMenu(page).locator('#recent-menu');
-  // Hovering opens the submenu, as it does for a mouse user. (Clicking after
-  // the pointer has arrived would toggle it shut again.)
+  // Hovering opens the submenu, as it does for a mouse user.
   await fileMenu(page).locator('#recent-btn').hover();
   await expect(sub).toBeVisible();
 }

@@ -21,7 +21,10 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-padding-top: 5rem; }
+/* Anchors must land below the sticky toolbar. This is a margin on the targets,
+   not scroll-padding on the page: padding made the browser scroll the document
+   whenever something in the toolbar itself took focus. */
+.markdown-body [id] { scroll-margin-top: 5rem; }
 body {
   margin: 0;
   background: var(--bg);
