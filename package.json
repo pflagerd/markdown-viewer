@@ -1,0 +1,11 @@
+{
+  "name": "markdown-viewer",
+  "private": true,
+  "description": "Test tooling for the Markdown Viewer PWA. The app itself (app/) has no build step and no dependencies.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
