@@ -17,7 +17,7 @@ Needs `python3` (to serve the app on localhost) and Chrome or Chromium.
 1. Put the launcher on your `PATH`:
 
    ```bash
-   ln -s "$PWD/bin/markdown-viewer" ~/.local/bin/markdown-viewer
+   ln -s "$PWD/markdown-viewer" ~/.local/bin/markdown-viewer
    ```
 
    `ln -s TARGET LINK` creates a symbolic link named `LINK` that points at `TARGET`
@@ -59,7 +59,7 @@ file from disk again.
 
 ## How it works
 
-- `bin/markdown-viewer` makes sure `python3 -m http.server` is serving `app/` on the loopback
+- `markdown-viewer` (the launcher script at the top level) makes sure `python3 -m http.server` is serving `app/` on the loopback
   interface, then starts Chrome with `--app-id=<id> FILE…`. Chrome hands the files to the app
   through the File Handling API (`launchQueue`), the same path the *Open With* menu uses. The
   server only ever serves the app's own static files, never your documents.

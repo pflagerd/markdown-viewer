@@ -19,7 +19,7 @@ set -euo pipefail
 PORT="${MARKDOWN_VIEWER_PORT:-8137}"
 ORIGIN="http://localhost:${PORT}"
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
-APP_DIR="$(dirname "$(dirname "$SELF")")/app"
+APP_DIR="$(dirname "$SELF")/app"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
 die() { echo "markdown-viewer: $*" >&2; exit 1; }
