@@ -135,6 +135,19 @@ const menuBox = (page) => page.evaluate(() => {
   return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
 });
 
+/**
+ * Scrolls the document and waits until the page has been told about it: the
+ * scroll event arrives a frame later, and the menu closes on scroll, so a
+ * menu opened in between would be closed again by this very scroll.
+ */
+async function scrollDocumentTo(page, y) {
+  await page.evaluate((y) => new Promise((resolve) => {
+    window.addEventListener('scroll', () => requestAnimationFrame(resolve), { once: true });
+    window.scrollTo(0, y);
+  }), y);
+  expect(await page.evaluate(() => window.scrollY)).toBe(y);
+}
+
 test.beforeEach(async ({ page }) => {
   await openApp(page);
   await instrument(page);
@@ -690,8 +703,7 @@ test.describe('position', () => {
 
   test('the menu is positioned against the window, not the document, when the page is scrolled', async ({ page }) => {
     await openMarkdown(page, `# Long\n\n${Array.from({ length: 150 }, (_, i) => `Line ${i}`).join('\n\n')}`);
-    await page.evaluate(() => window.scrollTo(0, 2000));
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(2000);
+    await scrollDocumentTo(page, 2000);
     await rightClickAt(page, 300, 400);
     const box = await menuBox(page);
     expect([box.left, box.top]).toEqual([300, 400]);
@@ -897,8 +909,7 @@ test.describe('keyboard', () => {
 
   test('arrow keys move through the menu instead of scrolling the document', async ({ page }) => {
     await openMarkdown(page, `# Long\n\n${Array.from({ length: 150 }, (_, i) => `Line ${i}`).join('\n\n')}`);
-    await page.evaluate(() => window.scrollTo(0, 1000));
-    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(1000);
+    await scrollDocumentTo(page, 1000);
     await rightClickAt(page, 300, 300);
     for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp']) await page.keyboard.press(key);
     await expect(item(page, 'Reload')).toBeFocused();

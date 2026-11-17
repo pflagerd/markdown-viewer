@@ -218,8 +218,12 @@ async function openTwoLongDocuments(page) {
     { name: 'two.md', content: longDoc('Two') },
   ]);
   await instrument(page);
-  await page.evaluate(() => window.scrollTo(0, 1500));
-  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(1500);
+  // Resolves once the page has been told about the scroll (a frame later).
+  await page.evaluate(() => new Promise((resolve) => {
+    window.addEventListener('scroll', () => requestAnimationFrame(resolve), { once: true });
+    window.scrollTo(0, 1500);
+  }));
+  expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(1500);
   await writeFile(page, 'one.md', longDoc('Changed'));
 }
 
@@ -370,21 +374,26 @@ test.describe('designed-in keys', () => {
     await expect(fileMenuItem(page, 'Open…')).toBeFocused();
   });
 
-  test('opening the File menu from the keyboard does not scroll the document', async ({ page }) => {
-    // APP BUG: openMenu() focuses the first menu item with a plain focus().
-    // The menu lives in the sticky toolbar, and Chromium "scrolls the item
-    // into view" by moving the document: from scrollY 1500 the page jumps
-    // several hundred pixels up, every time the menu is opened (with Enter,
-    // with Space, and with a mouse click as well). The reader loses their
-    // place. focus({ preventScroll: true }) would avoid it.
-    test.fail();
-    await openTwoLongDocuments(page);
-    await page.locator('#file-menu-btn').focus({ preventScroll: true });
-    expect(await scrollY(page)).toBe(1500);
-    await press(page, 'Enter');
-    await expect(fileMenuItem(page, 'Open…')).toBeFocused();
-    expect(await scrollY(page)).toBe(1500);
-  });
+  for (const key of ['Enter', 'Space']) {
+    test(`opening the File menu with ${key} does not scroll the document`, async ({ page }) => {
+      // Regression: focusing a menu item inside the sticky toolbar used to make
+      // Chromium scroll the document by several hundred pixels.
+      await openTwoLongDocuments(page);
+      await page.evaluate(() => {
+        window.__scrolls = 0;
+        window.addEventListener('scroll', () => { window.__scrolls++; });
+      });
+      await page.locator('#file-menu-btn').focus();
+      await press(page, key);
+      await expect(fileMenuItem(page, 'Open…')).toBeFocused();
+      await press(page, 'ArrowDown');
+      await expect(fileMenuItem(page, 'Recently Viewed')).toBeFocused();
+      // Two frames, so that a scroll caused by the focus change would have been reported.
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      expect(await scrollY(page)).toBe(1500);
+      expect(await page.evaluate(() => window.__scrolls)).toBe(0);
+    });
+  }
 
   test('Enter on a menu item chooses it', async ({ page }) => {
     await openTwoLongDocuments(page);
@@ -548,7 +557,7 @@ test.describe('every other keystroke', () => {
   // Keys that the app's own listeners act on although the gate suppresses
   // them: the gate only cancels the browser's default action, the event still
   // reaches the tab's and the menus' keydown handlers, and those do not look
-  // at the modifiers they should. See the test.fail() tests below.
+  // at the modifiers they should. See the regression tests below.
   const ENTER_VARIANTS = ['Control+Enter', 'Shift+Enter', 'Alt+Enter', 'Meta+Enter', 'Control+Space', 'Control+Shift+Space'];
   const MENU_VARIANTS = ['Shift+ArrowUp', 'Shift+ArrowDown', 'Shift+Escape'];
 
@@ -572,7 +581,7 @@ test.describe('every other keystroke', () => {
     // Space, whatever the modifiers, so Ctrl+Enter, Shift+Enter, Alt+Enter,
     // Meta+Enter, Ctrl+Space and Ctrl+Shift+Space - none of them designed-in
     // keys - switch tabs.
-    test.fail();
+    // Regression test for a fixed app bug.
     await openTwoLongDocuments(page);
     const acted = [];
     for (const key of ENTER_VARIANTS) {
@@ -610,7 +619,7 @@ test.describe('every other keystroke', () => {
     // APP BUG: the menu keydown handler ignores Ctrl/Alt/Meta combinations but
     // not Shift, so Shift+ArrowDown/Up move through the menu and Shift+Escape
     // closes it, although none of them is a designed-in key.
-    test.fail();
+    // Regression test for a fixed app bug.
     await openTwoLongDocuments(page);
     const acted = [];
     for (const key of MENU_VARIANTS) {

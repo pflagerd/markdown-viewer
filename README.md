@@ -116,12 +116,52 @@ Chrome's own context menu is replaced by: **Copy** (when text is selected), **Co
 - Markdown is converted by marked, the resulting HTML is sanitized by DOMPurify, and only then are
   math, code highlighting and diagrams applied. Scripts in a document do not run.
 
+## Tests
+
+The tests use [Playwright](https://playwright.dev/docs/intro) and live in `tests/`. They are the
+only part of the project that needs npm; the app itself has no build step.
+
+```bash
+npm install
+```
+
+Installs the test runner listed in `package.json` (`@playwright/test`) into `node_modules/`.
+
+```bash
+npx playwright install chromium
+```
+
+Downloads the Chromium build that this Playwright version drives; `chromium` limits the download
+to that one browser.
+
+```bash
+npm test
+```
+
+Runs `playwright test`: it starts `node server.js --port 8140 --headless` and runs every
+`tests/*.spec.js` against it. Set `MARKDOWN_VIEWER_TEST_PORT` to use another port.
+
+| File | Covers |
+|------|--------|
+| `rendering.spec.js` | Markdown, code highlighting, math, Mermaid, links, colour schemes |
+| `sanitizing.spec.js` | Documents cannot run code or restyle the app; the content security policy |
+| `file-menu.spec.js`, `tabs.spec.js`, `recent.spec.js` | The File menu, tabs, Recently Viewed |
+| `keys.spec.js` | Designed-in keys work; every other keystroke is suppressed; dev-tools mode |
+| `context-menu.spec.js` | The right-click menu and nothing beyond it |
+| `pwa.spec.js` | Manifest, service worker, offline start, heartbeat |
+| `server.spec.js`, `launcher.spec.js` | The node server and the bash launcher as processes |
+
 ## What has and has not been tested
 
-Tested with Chrome for Testing 153 on Linux: rendering of every feature above in light and dark
-mode, that Chrome offers the app for installation, installing it, opening files through the
-launcher (one file, three files as tabs, and a path with spaces), every File menu item in the
-installed app, and starting the installed app with the server stopped.
+Automated (the suite above, Chromium 153 headless on Linux): 730 tests. Headless key presses do not
+trigger Chrome's own actions, so for browser shortcuts the suite checks only whether the app
+suppresses them.
+
+Checked by hand in an installed app window with real key and mouse events (Chrome for Testing 153,
+virtual display): installing; opening one and several files through the launcher; every File menu
+item; blocked shortcuts (`F12`, `Ctrl+Shift+I`, `Ctrl+U`, `Ctrl+Shift+R`, `Ctrl+S`, `Ctrl+F5`,
+`F1`, `Ctrl+J`, `Ctrl+H`) doing nothing; `F12` opening dev tools after `--devtools`; the
+right-click menu; the server exiting 30 seconds after the last window closed.
 
 Not tested, because the test machine had no desktop environment and no `xdg-utils`:
 
@@ -131,12 +171,14 @@ Not tested, because the test machine had no desktop environment and no `xdg-util
   `MARKDOWN_VIEWER_INSTALLED=1`.
 - The *Open With* entry in Dolphin.
 - Chromium installed as a snap. Snap confinement may restrict which files it can read.
+- **Recently Viewed** after a browser restart, and Chrome's file picker (the tests stub it).
 
 ## Known limitations
 
 - Relative links and relative images in a document are not followed: the app receives a handle to
   one file, not to its directory.
-- Images are loaded from `http:`/`https:` URLs if the document references them.
+- Images are loaded from `http:`/`https:` URLs if the document references them, including
+  through a `style` attribute in raw HTML.
 - The file is not watched; use **File → Reload** after editing.
 - *Reload* in Chrome's own ⋮ menu cannot be intercepted; it reloads the page and forgets the open
   files, which stay in **Recently Viewed**. The same goes for shortcuts the browser never shows to

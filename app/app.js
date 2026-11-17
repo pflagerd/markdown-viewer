@@ -197,6 +197,8 @@ function buildTab(doc, i) {
   tab.addEventListener('click', () => activate(i));
   tab.addEventListener('auxclick', (e) => { if (e.button === 1) closeDoc(i); });
   tab.addEventListener('keydown', (e) => {
+    // The key gate has already suppressed modified variants such as Ctrl+Enter.
+    if (e.defaultPrevented) return;
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(i); }
   });
   tab.append(label, close);
@@ -621,7 +623,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // Suppressed keys (for example Shift+ArrowDown) must not drive the menus.
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
   const inContext = !contextMenu.hidden;
   if (fileMenu.hidden && !inContext) {
     if (e.shiftKey) return;
