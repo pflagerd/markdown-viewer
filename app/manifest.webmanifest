@@ -17,7 +17,7 @@
     {
       "action": "/",
       "accept": { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"] },
-      "launch_type": "multiple-clients"
+      "launch_type": "single-client"
     }
   ]
 }

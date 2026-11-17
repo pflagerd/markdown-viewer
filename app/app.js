@@ -3,13 +3,17 @@
 const view = document.getElementById('view');
 const filenameEl = document.getElementById('filename');
 const statusEl = document.getElementById('status');
-const openBtn = document.getElementById('open');
-const reloadBtn = document.getElementById('reload');
+const tabsEl = document.getElementById('tabs');
+const emptyEl = document.getElementById('empty');
+const fileMenuBtn = document.getElementById('file-menu-btn');
+const fileMenu = document.getElementById('file-menu');
+const recentBtn = document.getElementById('recent-btn');
+const recentMenu = document.getElementById('recent-menu');
 const installBtn = document.getElementById('install');
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-let currentHandle = null;   // FileSystemFileHandle of the open document
-let currentSource = null;   // its Markdown text
+const docs = [];            // open documents: { handle, name, source, scroll }
+let active = -1;            // index into docs of the one being shown, -1 if none
 let renderSeq = 0;          // guards against overlapping async renders
 
 /* ---------- Markdown → HTML ---------- */
@@ -150,9 +154,8 @@ function fixLinks(root) {
   }
 }
 
-async function render(source) {
+async function render(source, scroll = 0) {
   const seq = ++renderSeq;
-  const scroll = window.scrollY;
   const html = DOMPurify.sanitize(marked.parse(source), { FORBID_TAGS: ['style', 'form'] });
   const root = document.createElement('div');
   root.innerHTML = html;
@@ -170,29 +173,122 @@ async function render(source) {
   await renderMermaid(view, seq);
 }
 
-/* ---------- Files ---------- */
+/* ---------- Documents and tabs ---------- */
 
 function setStatus(text) { statusEl.textContent = text; }
 
-async function loadFromHandle(handle) {
-  try {
-    const file = await handle.getFile();
-    currentSource = await file.text();
-    currentHandle = handle;
-    filenameEl.textContent = file.name;
-    document.title = `${file.name} – Markdown Viewer`;
-    reloadBtn.disabled = false;
-    setStatus('');
-    await render(currentSource);
-  } catch (err) {
-    setStatus(`Could not read file: ${err.message || err}`);
+function buildTab(doc, i) {
+  const tab = document.createElement('div');
+  tab.className = 'tab';
+  tab.setAttribute('role', 'tab');
+  tab.setAttribute('aria-selected', String(i === active));
+  tab.tabIndex = 0;
+  tab.title = doc.name;
+  const label = document.createElement('span');
+  label.textContent = doc.name;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'tab-close';
+  close.setAttribute('aria-label', `Close ${doc.name}`);
+  close.textContent = '×';
+  close.addEventListener('click', (e) => { e.stopPropagation(); closeDoc(i); });
+  tab.addEventListener('click', () => activate(i));
+  tab.addEventListener('auxclick', (e) => { if (e.button === 1) closeDoc(i); });
+  tab.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(i); }
+  });
+  tab.append(label, close);
+  return tab;
+}
+
+// Brings the page in line with docs/active. The tab bar exists only while
+// more than one document is open.
+function showActive() {
+  const doc = docs[active];
+  tabsEl.hidden = docs.length < 2;
+  tabsEl.replaceChildren(...docs.map(buildTab));
+  filenameEl.hidden = docs.length > 1;
+  for (const item of fileMenu.querySelectorAll('[data-needs-doc]')) item.disabled = !doc;
+  if (!doc) {
+    renderSeq++;
+    filenameEl.textContent = 'No file open';
+    document.title = 'Markdown Viewer';
+    view.replaceChildren(emptyEl);
+    return Promise.resolve();
   }
+  filenameEl.textContent = doc.name;
+  document.title = doc.name;
+  return render(doc.source, doc.scroll);
+}
+
+function saveScroll() {
+  if (docs[active]) docs[active].scroll = window.scrollY;
+}
+
+function activate(i) {
+  saveScroll();
+  active = i;
+  return showActive();
+}
+
+// Opens each handle in its own tab (re-reading it if it is already open) and
+// shows the first one.
+async function openHandles(handles) {
+  let first = -1;
+  setStatus('');
+  for (const handle of handles) {
+    try {
+      let i = -1;
+      for (let k = 0; k < docs.length && i < 0; k++) {
+        if (await handle.isSameEntry(docs[k].handle)) i = k;
+      }
+      const file = await handle.getFile();
+      const source = await file.text();
+      if (i < 0) i = docs.push({ handle, name: file.name, source, scroll: 0 }) - 1;
+      else docs[i].source = source;
+      await rememberRecent(handle, file.name);
+      if (first < 0) first = i;
+    } catch (err) {
+      setStatus(`Could not read ${handle.name}: ${err.message || err}`);
+    }
+  }
+  if (first >= 0) await activate(first);
+}
+
+async function reloadActive() {
+  const doc = docs[active];
+  if (!doc) return;
+  try {
+    doc.source = await (await doc.handle.getFile()).text();
+    setStatus('');
+  } catch (err) {
+    setStatus(`Could not read ${doc.name}: ${err.message || err}`);
+    return;
+  }
+  saveScroll();
+  await showActive();
+}
+
+function closeDoc(i) {
+  if (!docs[i]) return;
+  saveScroll();
+  docs.splice(i, 1);
+  if (i < active) active--;
+  else if (i === active) active = Math.min(i, docs.length - 1);
+  return showActive();
+}
+
+function closeAll() {
+  docs.length = 0;
+  active = -1;
+  return showActive();
 }
 
 async function pickFile() {
-  let handle;
+  let handles;
   try {
-    [handle] = await window.showOpenFilePicker({
+    handles = await window.showOpenFilePicker({
+      multiple: true,
       types: [{
         description: 'Markdown',
         accept: { 'text/markdown': ['.md', '.markdown', '.mdown', '.mkd'] },
@@ -202,25 +298,178 @@ async function pickFile() {
     if (err.name !== 'AbortError') setStatus(String(err.message || err));
     return;
   }
-  window.scrollTo(0, 0);
-  await loadFromHandle(handle);
+  await openHandles(handles);
 }
 
 // Files arrive here when the installed app is started by the OS file handler
-// or by the markdown-viewer launcher (File Handling API).
+// or by the markdown-viewer launcher (File Handling API): one tab per file.
 if ('launchQueue' in window) {
   window.launchQueue.setConsumer((params) => {
-    if (params.files && params.files.length) loadFromHandle(params.files[0]);
+    if (params.files && params.files.length) openHandles([...params.files]);
   });
 }
 
-openBtn.addEventListener('click', pickFile);
-reloadBtn.addEventListener('click', () => currentHandle && loadFromHandle(currentHandle));
+/* ---------- Recently viewed ---------- */
+
+// File handles can be stored in IndexedDB, which is what lets a file be opened
+// again later without the file picker.
+const RECENT_MAX = 10;
+
+function recentStore(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open('markdown-viewer', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('kv');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction('kv', mode);
+      const req = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => { db.close(); resolve(req.result); };
+      tx.onabort = tx.onerror = () => { db.close(); reject(tx.error); };
+    };
+  });
+}
+const getRecent = async () => (await recentStore('readonly', (st) => st.get('recent'))) || [];
+const setRecent = (list) => recentStore('readwrite', (st) => st.put(list, 'recent'));
+
+async function rememberRecent(handle, name) {
+  try {
+    const kept = [];
+    for (const entry of await getRecent()) {
+      if (!(await handle.isSameEntry(entry.handle))) kept.push(entry);
+    }
+    await setRecent([{ name, handle }, ...kept].slice(0, RECENT_MAX));
+  } catch (err) {
+    console.warn('Could not update the recently viewed list', err);
+  }
+}
+
+async function openRecent(handle) {
+  try {
+    // Permission to read a stored handle may have lapsed; asking again needs
+    // the user gesture this menu click provides.
+    if ((await handle.queryPermission({ mode: 'read' })) !== 'granted'
+        && (await handle.requestPermission({ mode: 'read' })) !== 'granted') {
+      setStatus('Permission to read the file was not granted');
+      return;
+    }
+  } catch (err) {
+    setStatus(`Could not read file: ${err.message || err}`);
+    return;
+  }
+  await openHandles([handle]);
+}
+
+async function fillRecentMenu() {
+  let list = [];
+  try { list = await getRecent(); } catch (err) { console.warn(err); }
+  const items = list.map((entry) => {
+    const b = menuItem(entry.name);
+    b.addEventListener('click', () => { closeMenu(); openRecent(entry.handle); });
+    return b;
+  });
+  if (!items.length) {
+    const none = menuItem('No recent files');
+    none.disabled = true;
+    items.push(none);
+  }
+  const clear = menuItem('Clear');
+  clear.disabled = !list.length;
+  clear.addEventListener('click', async () => { closeMenu(); await setRecent([]); });
+  recentMenu.replaceChildren(...items, document.createElement('hr'), clear);
+}
+
+/* ---------- File menu ---------- */
+
+function menuItem(label) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('role', 'menuitem');
+  b.textContent = label;
+  return b;
+}
+
+const enabledItems = (menu) =>
+  [...menu.querySelectorAll('[role="menuitem"]')]
+    .filter((el) => !el.disabled && el.closest('.menu') === menu);
+
+function openSubmenu(focusFirst) {
+  recentMenu.hidden = false;
+  recentBtn.setAttribute('aria-expanded', 'true');
+  if (focusFirst) enabledItems(recentMenu)[0]?.focus();
+}
+function closeSubmenu() {
+  recentMenu.hidden = true;
+  recentBtn.setAttribute('aria-expanded', 'false');
+}
+async function openMenu() {
+  await fillRecentMenu();
+  fileMenu.hidden = false;
+  fileMenuBtn.setAttribute('aria-expanded', 'true');
+  enabledItems(fileMenu)[0]?.focus();
+}
+function closeMenu() {
+  closeSubmenu();
+  fileMenu.hidden = true;
+  fileMenuBtn.setAttribute('aria-expanded', 'false');
+}
+
+function exitApp() {
+  window.close();
+  // Chrome refuses to close some windows from script (for example an ordinary
+  // browser tab with history); say so instead of doing nothing.
+  setTimeout(() => setStatus('This window cannot be closed by the app; use the window\'s close button'), 300);
+}
+
+const actions = {
+  open: pickFile,
+  reload: reloadActive,
+  close: () => closeDoc(active),
+  closeAll,
+  exit: exitApp,
+};
+
+fileMenuBtn.addEventListener('click', () => (fileMenu.hidden ? openMenu() : closeMenu()));
+
+fileMenu.addEventListener('click', (e) => {
+  const item = e.target.closest('[data-action]');
+  if (!item || item.disabled) return;
+  closeMenu();
+  actions[item.dataset.action]();
+});
+
+recentBtn.addEventListener('click', () => (recentMenu.hidden ? openSubmenu(true) : closeSubmenu()));
+// With a mouse the submenu follows the pointer, like a desktop menu.
+fileMenu.addEventListener('mouseover', (e) => {
+  const item = e.target.closest('[role="menuitem"]');
+  if (!item) return;
+  if (item === recentBtn) openSubmenu(false);
+  else if (item.closest('.menu') === fileMenu) closeSubmenu();
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (!fileMenu.hidden && !e.target.closest('#menubar')) closeMenu();
+});
+window.addEventListener('blur', closeMenu);
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === 'o') pickFile();
-  else if (e.key === 'r' && currentHandle) loadFromHandle(currentHandle);
+  if (fileMenu.hidden) {
+    if (e.key === 'o') pickFile();
+    else if (e.key === 'r') reloadActive();
+    return;
+  }
+  const inSub = !recentMenu.hidden && recentMenu.contains(document.activeElement);
+  const items = enabledItems(inSub ? recentMenu : fileMenu);
+  const at = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown') items[(at + 1) % items.length]?.focus();
+  else if (e.key === 'ArrowUp') items[(at - 1 + items.length) % items.length]?.focus();
+  else if (e.key === 'ArrowRight' && document.activeElement === recentBtn) openSubmenu(true);
+  else if (e.key === 'ArrowLeft' && inSub) { closeSubmenu(); recentBtn.focus(); }
+  else if (e.key === 'Escape') {
+    if (inSub) { closeSubmenu(); recentBtn.focus(); } else { closeMenu(); fileMenuBtn.focus(); }
+  } else return;
+  e.preventDefault();
 });
 
 view.addEventListener('click', (e) => {
@@ -240,7 +489,7 @@ view.addEventListener('click', (e) => {
 
 // Diagrams and code colours follow the OS colour scheme.
 darkQuery.addEventListener('change', () => {
-  if (currentSource !== null) render(currentSource);
+  if (docs[active]) { saveScroll(); showActive(); }
 });
 
 /* ---------- PWA plumbing ---------- */

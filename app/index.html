@@ -17,17 +17,34 @@
 </head>
 <body>
 <header id="toolbar">
+  <nav id="menubar">
+    <button id="file-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">File</button>
+    <div id="file-menu" class="menu" role="menu" aria-label="File" hidden>
+      <button type="button" role="menuitem" data-action="open">Open…<kbd>O</kbd></button>
+      <hr>
+      <div id="recent-wrap">
+        <button type="button" role="menuitem" id="recent-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="recent-menu">Recently Viewed<span class="arrow" aria-hidden="true">▸</span></button>
+        <div id="recent-menu" class="menu submenu" role="menu" aria-label="Recently Viewed" hidden></div>
+      </div>
+      <hr>
+      <button type="button" role="menuitem" data-action="reload" data-needs-doc disabled>Reload<kbd>R</kbd></button>
+      <hr>
+      <button type="button" role="menuitem" data-action="close" data-needs-doc disabled>Close</button>
+      <button type="button" role="menuitem" data-action="closeAll" data-needs-doc disabled>Close All</button>
+      <hr>
+      <button type="button" role="menuitem" data-action="exit">Exit</button>
+    </div>
+  </nav>
   <span id="filename">No file open</span>
   <span id="status" role="status"></span>
   <button id="install" type="button" hidden>Install</button>
-  <button id="reload" type="button" title="Read the file from disk again (R)" disabled>Reload</button>
-  <button id="open" type="button" title="Open a Markdown file (O)">Open…</button>
+  <div id="tabs" role="tablist" hidden></div>
 </header>
 <main id="view" class="markdown-body">
   <div id="empty">
     <h1>Markdown Viewer</h1>
     <p>Open a file with <code>markdown-viewer FILE.md</code>, with your file manager's
-       <em>Open With</em> menu, or with the <strong>Open…</strong> button above.</p>
+       <em>Open With</em> menu, or with <strong>File → Open…</strong> above.</p>
     <p id="install-hint" hidden>The launcher and the <em>Open With</em> menu work only after this
        app has been installed. Use the <strong>Install</strong> button above.</p>
   </div>

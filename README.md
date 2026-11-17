@@ -40,14 +40,27 @@ Needs `python3` (to serve the app on localhost) and Chrome or Chromium.
 markdown-viewer notes.md
 ```
 
-Each file opens in its own app window. The first time, Chrome asks whether the app may open the
-file; tick *Remember my choice* to stop it asking.
+```bash
+markdown-viewer a.md b.md c.md
+```
+
+Each run of the launcher opens one app window. Several file names open as tabs in that window, one
+per file, with the first one showing; a single file shows no tab bar. The first time, Chrome asks
+whether the app may open the files; tick *Remember my choice* to stop it asking.
 
 Installing the app also registers it as a handler for `.md`, `.markdown`, `.mdown` and `.mkd`
 files, so it should appear in the file manager's *Open With* menu.
 
-In the app, **Open…** (or the `o` key) shows a file picker, and **Reload** (or `r`) reads the open
-file from disk again.
+### File menu
+
+| Item | What it does |
+|------|--------------|
+| **Open…** (`o`) | File picker; each chosen file opens in a new tab. |
+| **Recently Viewed** | The last 10 files viewed, newest first; choosing one opens it. **Clear** at the bottom empties the list. |
+| **Reload** (`r`) | Reads the current file from disk again, keeping the scroll position. |
+| **Close** | Closes the current file. Tabs also have their own × and close on middle-click. |
+| **Close All** | Closes every file in the window. |
+| **Exit** | Closes the window. |
 
 ### Launcher environment variables
 
@@ -71,7 +84,8 @@ file from disk again.
 
 Tested with Chrome for Testing 153 on Linux: rendering of every feature above in light and dark
 mode, that Chrome offers the app for installation, installing it, opening files through the
-launcher (including a path with spaces), and starting the installed app with the server stopped.
+launcher (one file, three files as tabs, and a path with spaces), every File menu item in the
+installed app, and starting the installed app with the server stopped.
 
 Not tested, because the test machine had no desktop environment and no `xdg-utils`:
 
@@ -87,7 +101,10 @@ Not tested, because the test machine had no desktop environment and no `xdg-util
 - Relative links and relative images in a document are not followed: the app receives a handle to
   one file, not to its directory.
 - Images are loaded from `http:`/`https:` URLs if the document references them.
-- The file is not watched; use **Reload** after editing.
+- The file is not watched; use **File → Reload** after editing.
+- Reloading the page itself (F5) forgets the open files; they stay in **Recently Viewed**.
+- **Recently Viewed** shows file names only, because the browser does not tell the app a file's
+  directory. After Chrome restarts it may ask again for permission when a recent file is chosen.
 
 ## Vendored libraries
 
