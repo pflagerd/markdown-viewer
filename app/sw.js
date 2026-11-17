@@ -1,12 +1,13 @@
 'use strict';
 
 // Bump when the list of files changes, so stale caches are dropped.
-const CACHE = 'markdown-viewer-v3';
+const CACHE = 'markdown-viewer-v4';
 
 const ASSETS = [
   './',
   'style.css',
   'app.js',
+  'heartbeat.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',
@@ -41,7 +42,11 @@ self.addEventListener('activate', (event) => {
 // server runs; cache fallback, so the installed app still starts without it.
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // The server's API (config, the heartbeat event stream) is live state: it
+  // must reach the network untouched and never be cached.
+  if (url.pathname.startsWith('/api/')) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
     try {

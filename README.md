@@ -12,7 +12,7 @@ Requirements are tracked in [issue 1](https://github.com/pflagerd/markdown-viewe
 
 ## Install
 
-Needs `python3` (to serve the app on localhost) and Chrome or Chromium.
+Needs `node` 18 or newer (to serve the app on localhost) and Chrome or Chromium.
 
 1. Put the launcher on your `PATH`:
 
@@ -22,7 +22,7 @@ Needs `python3` (to serve the app on localhost) and Chrome or Chromium.
 
    `ln -s TARGET LINK` creates a symbolic link named `LINK` that points at `TARGET`
    ([ln(1)](https://man7.org/linux/man-pages/man1/ln.1.html)). The launcher resolves the link to
-   find the `app/` directory, so the repository has to stay where it is.
+   find `server.js` and the `app/` directory, so the repository has to stay where it is.
 
 2. Run it once with no arguments:
 
@@ -62,6 +62,39 @@ files, so it should appear in the file manager's *Open With* menu.
 | **Close All** | Closes every file in the window. |
 | **Exit** | Closes the window. |
 
+### Keyboard
+
+Only these keys do anything; every other keystroke is suppressed.
+
+| Keys | Effect |
+|------|--------|
+| `F5`, `Ctrl+R`, `r` | Reload the current file |
+| `o` | Open |
+| Arrows, `Enter`, `Escape`, `Tab`, `Shift+Tab` | Menus and focus |
+| Arrows, `PageUp`, `PageDown`, `Home`, `End`, `Space`, `Shift+Space` | Scrolling |
+| `Ctrl+C`, `Ctrl+A` | Copy, select all |
+| `Ctrl+F` | Chrome's find bar |
+| `Ctrl+P` | Print |
+| `Ctrl +`, `Ctrl -`, `Ctrl 0`, `Ctrl`+mouse wheel | Zoom |
+
+Started with `--devtools`, the app also lets through `F12`, `Ctrl+Shift+I`, `Ctrl+Shift+J`,
+`Ctrl+Shift+C`, `Ctrl+Shift+R` and `Ctrl+F5`.
+
+### Right-click menu
+
+Chrome's own context menu is replaced by: **Copy** (when text is selected), **Copy Link Address**
+(on a link), **Reload** and **Close** (the current file).
+
+### Launcher options
+
+| Option | Meaning |
+|--------|---------|
+| `--devtools` | Lets the dev-tools keys listed above through, for windows opened from now on. A later launch without it turns that off again. |
+| `--headless` | Starts only the server, prints its URL, and exits. A server started this way never stops by itself. |
+| `--stop` | Stops the server for this port. |
+| `--` | Everything after it is a file name. |
+| `-h`, `--help` | Shows usage. |
+
 ### Launcher environment variables
 
 | Variable | Meaning |
@@ -69,13 +102,16 @@ files, so it should appear in the file manager's *Open With* menu.
 | `MARKDOWN_VIEWER_PORT` | Port on localhost that serves the app. Default `8137`. The port is part of the app's identity, so changing it means installing again. |
 | `MARKDOWN_VIEWER_BROWSER` | Chrome/Chromium executable to use. Default: the one that installed the app, otherwise the first of `google-chrome-stable`, `google-chrome`, `chromium`, `chromium-browser` on `PATH`. |
 | `MARKDOWN_VIEWER_INSTALLED` | Set to `1` to skip the launcher's check that the app is installed. |
+| `MARKDOWN_VIEWER_IDLE_SECONDS` | How long the server waits with no app window attached before it exits. Default `30`. |
 
 ## How it works
 
-- `markdown-viewer` (the launcher script at the top level) makes sure `python3 -m http.server` is serving `app/` on the loopback
-  interface, then starts Chrome with `--app-id=<id> FILE…`. Chrome hands the files to the app
+- `markdown-viewer` (the bash launcher at the top level) makes sure `node server.js` is serving
+  `app/` on the loopback interface, then starts Chrome with `--app-id=<id> FILE…`. Chrome hands the files to the app
   through the File Handling API (`launchQueue`), the same path the *Open With* menu uses. The
   server only ever serves the app's own static files, never your documents.
+- Every app window shares one connection to the server. The server exits 30 seconds after the last
+  window closes; the launcher starts it again next time. `--headless` servers never exit.
 - A service worker caches the app, so an installed app still starts when the server is not running.
 - Markdown is converted by marked, the resulting HTML is sanitized by DOMPurify, and only then are
   math, code highlighting and diagrams applied. Scripts in a document do not run.
@@ -102,9 +138,11 @@ Not tested, because the test machine had no desktop environment and no `xdg-util
   one file, not to its directory.
 - Images are loaded from `http:`/`https:` URLs if the document references them.
 - The file is not watched; use **File → Reload** after editing.
-- `F5` and `Ctrl+R` are captured and re-read the current file. Reloading the page itself
-  (`Ctrl+Shift+R`, `Ctrl+F5`, or *Reload* in Chrome's own ⋮ menu) cannot be intercepted and
-  forgets the open files; they stay in **Recently Viewed**.
+- *Reload* in Chrome's own ⋮ menu cannot be intercepted; it reloads the page and forgets the open
+  files, which stay in **Recently Viewed**. The same goes for shortcuts the browser never shows to
+  a page, such as `Ctrl+W`.
+- If an older version's `python3 -m http.server` is still running on the port, the launcher refuses
+  to use it; stop that process once.
 - **Recently Viewed** shows file names only, because the browser does not tell the app a file's
   directory. After Chrome restarts it may ask again for permission when a recent file is chosen.
 
