@@ -101,7 +101,8 @@ server_pid() {
   local pid args=()
   [ -f "$PID_FILE" ] || return 1
   pid="$(tr -cd '0-9' <"$PID_FILE")"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
+  [ -n "$pid" ] && [ "$pid" -gt 0 ] && kill -0 "$pid" 2>/dev/null || return 1
+  [ -r "/proc/$pid/cmdline" ] || return 1
   mapfile -d '' args <"/proc/$pid/cmdline" 2>/dev/null || return 1
   [ ${#args[@]} -ge 2 ] || return 1
   [[ "${args[0]##*/}" == node* ]] || return 1
@@ -118,7 +119,12 @@ stop_server() {
   pid="$(server_pid)" || return 1
   kill "$pid" 2>/dev/null || true
   # Not "kill -0": an exited server can linger as a zombie until it is reaped.
-  for _ in $(seq 50); do [ "$(server_pid)" = "$pid" ] || return 0; sleep 0.1; done
+  # The server removes its pid file a moment before it lets go of the port, so
+  # wait for both; a caller may want to start a new server straight away.
+  for _ in $(seq 50); do
+    if [ "$(server_pid)" != "$pid" ] && ! listening; then return 0; fi
+    sleep 0.1
+  done
   die "server (pid $pid) did not stop"
 }
 

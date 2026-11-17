@@ -19,14 +19,13 @@ let renderSeq = 0;          // guards against overlapping async renders
 
 /* ---------- Markdown → HTML ---------- */
 
-const escapeAttr = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
 // Math is emitted as inert placeholders and typeset by KaTeX only after the
 // HTML has been sanitized, so KaTeX markup never has to pass the sanitizer.
+// The TeX is percent-encoded because the sanitizer drops attributes whose
+// value looks like markup ("]>", "-->", "</"), which ordinary formulas contain.
 const mathPlaceholder = (tex, display) => display
-  ? `<div class="math" data-display="1" data-tex="${escapeAttr(tex)}"></div>\n`
-  : `<span class="math" data-tex="${escapeAttr(tex)}"></span>`;
+  ? `<div class="math" data-display="1" data-tex="${encodeURIComponent(tex)}"></div>\n`
+  : `<span class="math" data-tex="${encodeURIComponent(tex)}"></span>`;
 
 marked.use({
   gfm: true,
@@ -121,11 +120,13 @@ function typesetMath(root) {
     const div = document.createElement('div');
     div.className = 'math';
     div.dataset.display = '1';
-    div.dataset.tex = code.textContent;
+    div.dataset.tex = encodeURIComponent(code.textContent);
     code.parentElement.replaceWith(div);
   }
   for (const el of root.querySelectorAll('.math[data-tex]')) {
-    katex.render(el.dataset.tex, el, {
+    let tex = el.dataset.tex;
+    try { tex = decodeURIComponent(tex); } catch { /* hand-written placeholder: use as is */ }
+    katex.render(tex, el, {
       displayMode: el.dataset.display === '1',
       throwOnError: false,
     });
@@ -440,7 +441,9 @@ fileMenu.addEventListener('click', (e) => {
   actions[item.dataset.action]();
 });
 
-recentBtn.addEventListener('click', () => (recentMenu.hidden ? openSubmenu(true) : closeSubmenu()));
+// Hovering has usually opened the submenu already, so a click must not toggle
+// it shut again.
+recentBtn.addEventListener('click', () => openSubmenu(true));
 // With a mouse the submenu follows the pointer, like a desktop menu.
 fileMenu.addEventListener('mouseover', (e) => {
   const item = e.target.closest('[role="menuitem"]');
@@ -651,7 +654,9 @@ view.addEventListener('click', (e) => {
     e.preventDefault();
     let id = href.slice(1);
     try { id = decodeURIComponent(id); } catch { /* keep raw */ }
-    (document.getElementById(id) || document.body).scrollIntoView();
+    // Look inside the document first: a heading can share an id with the app's
+    // own elements ("# View" becomes id="view").
+    (view.querySelector(`[id="${CSS.escape(id)}"]`) || document.body).scrollIntoView();
   } else if (a.classList.contains('unresolved')) {
     e.preventDefault();
     setStatus(a.title);

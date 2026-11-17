@@ -4,8 +4,10 @@
 // Isolation rules these helpers implement:
 //   - every test gets a fresh temp dir (sandbox()) whose run/ subdirectory is
 //     passed as XDG_RUNTIME_DIR, so pid/devtools files never touch real state;
-//   - every parallel worker has one port of its own (portFor()), and a test
-//     must leave it free again (sandbox.cleanup() waits for that);
+//   - every test claims a port of its own from 8160-8199 through a lock file
+//     in the temp dir (claimPort()), so parallel workers and even two test
+//     runs at the same time never share one; a test must leave its port free
+//     again (sandbox.cleanup() waits for that, then releases the claim);
 //   - cleanup kills only processes whose environment carries this test's
 //     XDG_RUNTIME_DIR, so nothing that belongs to someone else is touched.
 
@@ -25,10 +27,27 @@ const APP_DIR = path.join(ROOT, 'app');
 const FIRST_PORT = 8160;
 const PORTS = 40;   // 8160-8199
 
-/** The port owned by the worker running this test. */
-function portFor(testInfo) {
-  if (testInfo.parallelIndex >= PORTS) throw new Error('more workers than reserved ports');
-  return FIRST_PORT + testInfo.parallelIndex;
+/**
+ * Claims a free port: { port, release() }. The claim is a lock file created
+ * exclusively; a lock whose owner process is gone is taken over.
+ */
+function claimPort() {
+  for (let port = FIRST_PORT; port < FIRST_PORT + PORTS; port++) {
+    const lock = path.join(os.tmpdir(), `markdown-viewer-test-port-${port}.lock`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        fs.writeFileSync(lock, `${process.pid}\n`, { flag: 'wx' });
+        return { port, release: () => fs.rmSync(lock, { force: true }) };
+      } catch (err) {
+        if (err.code !== 'EEXIST') throw err;
+        let owner = 0;
+        try { owner = Number(fs.readFileSync(lock, 'utf8')); } catch (err2) { /* just released */ }
+        if (owner && alive(owner)) break;      // really in use: next port
+        fs.rmSync(lock, { force: true });      // stale: try once more
+      }
+    }
+  }
+  throw new Error(`no free test port in ${FIRST_PORT}-${FIRST_PORT + PORTS - 1}`);
 }
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -92,11 +111,12 @@ function pidsWithRunDir(runDir) {
  * cleanup() kills whatever was started with this run dir, waits until the
  * port is free again and removes the temp dir.
  */
-function sandbox(testInfo) {
+function sandbox() {
+  const claim = claimPort();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'markdown-viewer-proc-'));
   const box = {
     dir,
-    port: portFor(testInfo),
+    port: claim.port,
     run: path.join(dir, 'run'),
     home: path.join(dir, 'home'),
     data: path.join(dir, 'data'),
@@ -115,6 +135,7 @@ function sandbox(testInfo) {
     }
     await waitFor(async () => !(await listening(box.port)), `port ${box.port} to be free`);
     fs.rmSync(dir, { recursive: true, force: true });
+    claim.release();
   };
   return box;
 }

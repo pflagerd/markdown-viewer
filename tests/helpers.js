@@ -147,8 +147,13 @@ async function openMarkdown(page, content, name = 'doc.md') {
 
 /* ---------- rendering ---------- */
 
-/** The rendered document root. */
-function view(page) { return page.locator('#view'); }
+// A document may contain elements whose ids collide with the app's own
+// (DOMPurify keeps id attributes). The app's elements come first in the page,
+// so every helper addresses "the first element with that id".
+const appEl = (page, id) => page.locator(`#${id}`).first();
+
+/** The rendered document root (the app's <main id="view">). */
+function view(page) { return appEl(page, 'view'); }
 
 /**
  * Waits until no Mermaid block is still waiting to be drawn: every
@@ -169,6 +174,7 @@ async function waitForRendered(page) {
 async function rerender(page, action) {
   await page.evaluate(() => {
     window.__staleRender = document.querySelector('#view').firstElementChild;
+    if (!window.__staleRender) throw new Error('rerender(): nothing is rendered yet');
   });
   await action();
   await page.waitForFunction(() => !window.__staleRender || !window.__staleRender.isConnected);
@@ -177,7 +183,7 @@ async function rerender(page, action) {
 
 /** Text of the status area in the toolbar ('' when there is no message). */
 async function statusText(page) {
-  return (await page.locator('#status').textContent()).trim();
+  return (await appEl(page, 'status').textContent()).trim();
 }
 
 /* ---------- tabs ---------- */
@@ -190,7 +196,7 @@ async function statusText(page) {
  */
 async function tabs(page) {
   return page.evaluate(() => {
-    const bar = document.querySelector('#tabs');
+    const bar = document.querySelector('#tabs');   // first match = the app's
     if (!bar || bar.hidden || !bar.getClientRects().length) return { names: [], active: null };
     const all = [...bar.querySelectorAll('[role="tab"]')];
     const label = (t) => (t.querySelector('span') || t).textContent;
@@ -201,22 +207,23 @@ async function tabs(page) {
 
 /** Locator of the tab with this label. */
 function tab(page, name) {
-  return page.locator('#tabs [role="tab"]').filter({ has: page.getByText(name, { exact: true }) });
+  return appEl(page, 'tabs').locator('[role="tab"]').filter({ has: page.getByText(name, { exact: true }) });
 }
 
 /** File name shown in the toolbar when there is no tab bar, else null. */
 async function shownFilename(page) {
-  const el = page.locator('#filename');
+  const el = appEl(page, 'filename');
   return (await el.isVisible()) ? (await el.textContent()).trim() : null;
 }
 
 /* ---------- File menu ---------- */
 
-const fileMenu = (page) => page.locator('#file-menu');
+const fileMenu = (page) => appEl(page, 'file-menu');
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Opens the File menu (no-op when it is already open). */
 async function openFileMenu(page) {
-  if (!(await fileMenu(page).isVisible())) await page.locator('#file-menu-btn').click();
+  if (!(await fileMenu(page).isVisible())) await appEl(page, 'file-menu-btn').click();
   await expect(fileMenu(page)).toBeVisible();
 }
 
@@ -226,9 +233,9 @@ async function openFileMenu(page) {
  * 'Recently Viewed'.
  */
 function fileMenuItem(page, label) {
-  const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const esc = escapeRe(label);
   // The label is followed by an optional shortcut (<kbd>) or submenu arrow.
-  return page.locator('#file-menu > [role="menuitem"], #recent-btn')
+  return fileMenu(page).locator('> [role="menuitem"], #recent-btn')
     .filter({ hasText: new RegExp(`^\\s*${esc}\\s*(F5|O|▸)?\\s*$`) });
 }
 
@@ -241,8 +248,10 @@ async function clickFileMenuItem(page, label) {
 /** Opens File > Recently Viewed and leaves it open. */
 async function openRecentMenu(page) {
   await openFileMenu(page);
-  const sub = page.locator('#recent-menu');
-  if (!(await sub.isVisible())) await page.locator('#recent-btn').click();
+  const sub = fileMenu(page).locator('#recent-menu');
+  // Hovering opens the submenu, as it does for a mouse user. (Clicking after
+  // the pointer has arrived would toggle it shut again.)
+  await fileMenu(page).locator('#recent-btn').hover();
   await expect(sub).toBeVisible();
 }
 
@@ -253,7 +262,7 @@ async function openRecentMenu(page) {
 async function recentItems(page) {
   await openRecentMenu(page);
   // Entries come first, then a separator, then "Clear".
-  return page.locator('#recent-menu').evaluate((menu) => {
+  return fileMenu(page).locator('#recent-menu').evaluate((menu) => {
     const names = [];
     for (const el of menu.children) {
       if (el.tagName === 'HR') break;
@@ -266,7 +275,8 @@ async function recentItems(page) {
 /** Opens File > Recently Viewed and clicks the entry with this file name. */
 async function clickRecentItem(page, name) {
   await openRecentMenu(page);
-  await page.locator('#recent-menu [role="menuitem"]').filter({ hasText: name }).first().click();
+  await fileMenu(page).locator('#recent-menu [role="menuitem"]')
+    .filter({ hasText: new RegExp(`^${escapeRe(name)}$`) }).first().click();
 }
 
 module.exports = {

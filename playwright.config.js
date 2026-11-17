@@ -2,7 +2,8 @@
 // The app has no build step; the tests load it from a local static server.
 const { defineConfig } = require('@playwright/test');
 
-const PORT = 8140;
+// Port of the test server. Override when two runs must not collide.
+const PORT = Number(process.env.MARKDOWN_VIEWER_TEST_PORT) || 8140;
 
 module.exports = defineConfig({
   testDir: 'tests',
@@ -24,11 +25,11 @@ module.exports = defineConfig({
     video: 'off',
   },
   webServer: {
-    command: `python3 -m http.server ${PORT} --bind 127.0.0.1 --directory app`,
+    // --headless: the server does not exit when no app window is attached.
+    command: `node server.js --port ${PORT} --headless`,
     url: `http://localhost:${PORT}/`,
     cwd: __dirname,
     reuseExistingServer: false,
-    stderr: 'ignore',
     timeout: 20_000,
   },
 });
